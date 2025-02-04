@@ -16,7 +16,7 @@ from openai import OpenAI                # summarizing articles and providing in
 import matplotlib.pyplot as plt          # graphing n stuff
 
 # Polygon API Key
-API_KEY = "n_4memqwrYdyzCYsz2X0fnZ2JbIhpJJS"
+API_KEY = "GET YOUR OWN KEY"
 BASE_URL = "https://api.polygon.io"
 
 def is_ticker_valid(ticker):
