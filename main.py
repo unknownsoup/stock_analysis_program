@@ -16,7 +16,7 @@ from openai import OpenAI                # summarizing articles and providing in
 import matplotlib.pyplot as plt          # graphing n stuff
 
 # Polygon API Key
-API_KEY = "GET YOUR OWN KEY"
+API_KEY = "n_4memqwrYdyzCYsz2X0fnZ2JbIhpJJS"
 BASE_URL = "https://api.polygon.io"
 
 def is_ticker_valid(ticker):
@@ -28,6 +28,24 @@ def is_real_ticker(ticker):
     params = {"ticker": ticker, "apiKey": API_KEY}
     response = requests.get(url, params=params)
     return response.status_code == 200 and len(response.json().get('results', [])) > 0
+
+def ema_graphs(df):
+    df['EMA_30'] = df['Close'].ewm(span=30, adjust=False).mean()
+    df['EMA_60'] = df['Close'].ewm(span=60, adjust=False).mean()
+    df['EMA_90'] = df['Close'].ewm(span=90, adjust=False).mean()
+    df['EMA_120'] = df['Close'].ewm(span=120, adjust=False).mean()
+
+    ema_lst = [df['EMA_30'], df['EMA_60'], df['EMA_90'], df['EMA_120']]
+
+    days = 30
+    for ema in ema_lst:
+        plt.figure(figsize=(12, 6))
+        plt.plot(df['DateTime'], df['Close'], label='Close Price')
+        plt.plot(df['DateTime'], ema, label=f'{days} EMA', linestyle='--')
+        plt.title(f'{symbol} Price with {days} EMA')
+        plt.legend()
+        days += 30
+    plt.show()
 
 current_date = date.today()
 SWITCH = True
@@ -44,13 +62,13 @@ while SWITCH == True:
         else:
             print("Invalid ticker format, try again: ")
 
-    from_date = current_date - timedelta(days=7)
+    from_date = current_date - timedelta(days=120)
     to_date = date.today()
 
     ''' use this to adjust what gets pulled from the URL
     https://polygon.io/docs/stocks/get_v2_aggs_ticker__stocksticker__range__multiplier___timespan___from___to
     '''
-    url = (f"{BASE_URL}/v2/aggs/ticker/{symbol}/range/5/minute/{from_date}/{to_date}?"
+    url = (f"{BASE_URL}/v2/aggs/ticker/{symbol}/range/1/day/{from_date}/{to_date}?"
            f"adjusted=true&sort=asc&apiKey=n_4memqwrYdyzCYsz2X0fnZ2JbIhpJJS")
 
     params = {
@@ -78,7 +96,7 @@ while SWITCH == True:
         'n': 'Transactions'
     })
     print(df.head(7))
-    print(df.describe())
+    ema_graphs(df)
 
 
     # Prompt to continue or quit
