@@ -1,5 +1,5 @@
 """
-purpose: stock analysis software that generates ticker analysis pdfs .
+purpose: stock analysis software that generates ticker analysis pdfs.
 
 Features:
     - Input ticker name and select (crypto/stock) and timeline
@@ -9,47 +9,104 @@ Features:
     -
 """
 import pandas as pd
-import requests                          # making API requests
-from datetime import date, timedelta     # getting the date
-import re                                # regular expressions
-from openai import OpenAI                # summarizing articles and providing insights about the data
-import matplotlib.pyplot as plt          # graphing n stuff
+import requests                                         # making API requests
+from datetime import date, timedelta                    # getting the date
+import re                                               # regular expressions
+from openai import OpenAI                               # summarizing articles and providing insights about the data
+import matplotlib.pyplot as plt                         # graphing n stuff
+from matplotlib.backends.backend_pdf import PdfPages    # saving graphs to pdf
 
 # Polygon API Key
-API_KEY = "GET YOUR OWN KEY"
+API_KEY = "YOUR KEY"
 BASE_URL = "https://api.polygon.io"
 
+# checking if the user inputted ticker is in the correct format
 def is_ticker_valid(ticker):
     pattern = r'^[A-Z]{4}$'
     return bool(re.match(pattern, ticker))
 
+# checking if that same ticker exists
 def is_real_ticker(ticker):
     url = f"{BASE_URL}/v3/reference/tickers"
     params = {"ticker": ticker, "apiKey": API_KEY}
     response = requests.get(url, params=params)
     return response.status_code == 200 and len(response.json().get('results', [])) > 0
 
-def ema_graphs(df):
+# creating the 30, 60, 90, and 120 Moving Average charts
+def ema_graphs(df, pdf=None):
     df['EMA_30'] = df['Close'].ewm(span=30, adjust=False).mean()
     df['EMA_60'] = df['Close'].ewm(span=60, adjust=False).mean()
     df['EMA_90'] = df['Close'].ewm(span=90, adjust=False).mean()
     df['EMA_120'] = df['Close'].ewm(span=120, adjust=False).mean()
 
-    ema_lst = [df['EMA_30'], df['EMA_60'], df['EMA_90'], df['EMA_120']]
+    # Plotting Close Price + All EMAs
+    plt.figure(figsize=(14, 8))
 
-    days = 30
-    for ema in ema_lst:
-        plt.figure(figsize=(12, 6))
-        plt.plot(df['DateTime'], df['Close'], label='Close Price')
-        plt.plot(df['DateTime'], ema, label=f'{days} EMA', linestyle='--')
-        plt.title(f'{symbol} Price with {days} EMA')
-        plt.legend()
-        days += 30
-    plt.show()
+    # Plot Close Price
+    plt.plot(df['DateTime'], df['Close'], label='Close Price', linewidth=2, color='black')
 
-current_date = date.today()
+    # Plot EMAs
+    plt.plot(df['DateTime'], df['EMA_30'], label='30 EMA', linestyle='--', color='blue')
+    plt.plot(df['DateTime'], df['EMA_60'], label='60 EMA', linestyle='--', color='orange')
+    plt.plot(df['DateTime'], df['EMA_90'], label='90 EMA', linestyle='--', color='green')
+    plt.plot(df['DateTime'], df['EMA_120'], label='120 EMA', linestyle='--', color='red')
+
+    # Graph Aesthetics
+    plt.title(f'{symbol} Price with 30, 60, 90, 120 EMAs')
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.legend()
+    plt.grid(True)
+
+    if pdf:
+        pdf.savefig()  # Save the current figure to PDF
+        plt.close()  # Close the figure after saving
+    else:
+        plt.show()
+
+    # creating the MACD and VWAP charts
+def MACD_VWAP_chart(df, pdf=None):
+    df['EMA_12'] = df['Close'].ewm(span=12, adjust=False).mean()
+    df['EMA_26'] = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = df['EMA_12'] - df['EMA_26']
+    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
+
+    # VWAP Calculation
+    df['Typical_Price'] = (df['High'] + df['Low'] + df['Close']) / 3
+    df['Cumulative_TPV'] = (df['Typical_Price'] * df['Volume']).cumsum()
+    df['Cumulative_Volume'] = df['Volume'].cumsum()
+    df['VWAP'] = df['Cumulative_TPV'] / df['Cumulative_Volume']
+
+    # Plotting
+    plt.figure(figsize=(14, 8))
+
+    # Price and VWAP
+    plt.subplot(2, 1, 1)
+    plt.plot(df['DateTime'], df['Close'], label='Close Price', color='blue')
+    plt.plot(df['DateTime'], df['VWAP'], label='VWAP', linestyle='--', color='orange')
+    plt.title(f'{symbol} - Close Price with VWAP')
+    plt.legend()
+
+    # MACD and Signal Line
+    plt.subplot(2, 1, 2)
+    plt.plot(df['DateTime'], df['MACD'], label='MACD', color='green')
+    plt.plot(df['DateTime'], df['Signal_Line'], label='Signal Line', linestyle='--', color='red')
+    plt.bar(df['DateTime'], df['MACD_Hist'], label='MACD Histogram', color='gray', alpha=0.4)
+    plt.title(f'{symbol} - MACD Indicator')
+    plt.legend()
+
+    plt.tight_layout()
+
+    if pdf:
+        pdf.savefig()  # Save the current figure to PDF
+        plt.close()  # Close the figure after saving
+    else:
+        plt.show()
+
 SWITCH = True
 while SWITCH == True:
+    # grabbing ticker from the user
     while True:
         symbol = input("Enter a stock ticker (e.g., AAPL, MSFT): ").strip().upper()
 
@@ -62,8 +119,9 @@ while SWITCH == True:
         else:
             print("Invalid ticker format, try again: ")
 
-    from_date = current_date - timedelta(days=120)
+    # getting the da
     to_date = date.today()
+    from_date = to_date - timedelta(days=120)
 
     ''' use this to adjust what gets pulled from the URL
     https://polygon.io/docs/stocks/get_v2_aggs_ticker__stocksticker__range__multiplier___timespan___from___to
@@ -96,23 +154,30 @@ while SWITCH == True:
         'n': 'Transactions'
     })
     print(df.head(7))
-    ema_graphs(df)
+    ema_graphs(df=df)
+    MACD_VWAP_chart(df=df)
 
-
-    # Prompt to continue or quit
+    # Menu to enter again, save as pdf, or quit
     try:
         choice = input("\n\nComplete!\n"
                        "[1] Enter Another Ticker\n"
-                       "[2] Quit\n\n")
+                       "[2] Save to PDF and Quit\n"
+                       "[3] Quit\n\n")
         choice = int(choice)
 
         if choice == 1:
             continue
         elif choice == 2:
+            pdf_filename = f"{to_date}_{symbol}_Charts.pdf"
+            with PdfPages(pdf_filename) as pdf:
+                ema_graphs(df=df, pdf=pdf)
+                MACD_VWAP_chart(df=df, pdf=pdf)
+                break
+        elif choice == 3:
             break
         else:
-            print("Invalid choice. Please enter 1 or 2.")
+            print("Invalid choice. Please enter 1-3: ")
     except ValueError:
-        print("Invalid input. Please enter a number (1 or 2).")
+        print("Invalid input. Please enter a number (1-3): ")
 
-print("\nProgram Closed")
+print("Program Closed")
